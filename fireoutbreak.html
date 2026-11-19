@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>SCDF 3D Vehicle Fire Extinguisher Simulator (SS 578)</title>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <style>
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* Top Status HUD */
+    #hud {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      z-index: 999;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .top-bar {
+      width: 100%;
+      background: rgba(185, 28, 28, 0.95);
+      color: #fff;
+      padding: 10px 14px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+    }
+
+    .status-pill {
+      margin-top: 8px;
+      background: rgba(15, 23, 42, 0.9);
+      color: #4ade80;
+      border: 1px solid #4ade80;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .status-pill.warning {
+      color: #facc15;
+      border-color: #facc15;
+    }
+
+    /* Bottom Touch/Click Control Panel */
+    #controls {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+      background: rgba(15, 23, 42, 0.92);
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.2);
+      width: 94%;
+      max-width: 560px;
+      text-align: center;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+    }
+
+    #guide-text {
+      color: #f8fafc;
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+
+    .btn-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .vr-btn {
+      padding: 12px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: #1e293b;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 0.88rem;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .vr-btn.highlight {
+      background: #eab308;
+      color: #111827;
+      border-color: #fef08a;
+      animation: pulse 1.2s infinite;
+    }
+
+    .vr-btn.active {
+      background: #16a34a;
+      border-color: #4ade80;
+      color: #fff;
+      animation: none;
+    }
+
+    .vr-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.03); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top HUD -->
+  <div id="hud">
+    <div class="top-bar">SCDF 3D VEHICLE FIRE TRAINER</div>
+    <div id="status-badge" class="status-pill">SS 578 TAG: VALID | PRESSURE: GREEN</div>
+  </div>
+
+  <!-- Bottom Control Buttons -->
+  <div id="controls">
+    <div id="guide-text">Vehicle engine fire detected! Tap <strong>1. Pull Safety Pin</strong> (or tap the yellow pin).</div>
+    <div class="btn-row">
+      <button id="btn-pin" class="vr-btn highlight" onclick="pullPin()">1. Pull Safety Pin</button>
+      <button id="btn-aim" class="vr-btn" onclick="aimNozzle()" disabled>2. Aim at Fire</button>
+      <button id="btn-spray" class="vr-btn" 
+              onmousedown="startSpray()" onmouseup="stopSpray()" onmouseleave="stopSpray()"
+              ontouchstart="event.preventDefault(); startSpray();" ontouchend="stopSpray()" disabled>
+        3. Hold to Spray
+      </button>
+      <button id="btn-inspect" class="vr-btn" onclick="inspectTag()">Inspect SS 578 Tag</button>
+    </div>
+    <div style="margin-top:8px;">
+      <button onclick="resetScene()" style="background:none;border:none;color:#94a3b8;text-decoration:underline;font-size:0.8rem;cursor:pointer;">Reset Simulator</button>
+    </div>
+  </div>
+
+  <!-- 3D Scene -->
+  <a-scene vr-mode-ui="enabled: false" cursor="rayOrigin: mouse" raycaster="objects: .clickable">
+    
+    <!-- Outdoor Evening / Overcast Sky & Lighting -->
+    <a-sky color="#0f172a"></a-sky>
+    <a-light type="ambient" color="#cbd5e1" intensity="0.75"></a-light>
+    <a-light type="directional" position="-4 8 4" intensity="0.7" color="#e2e8f0"></a-light>
+    <!-- Flickering Orange Light from Car Engine Fire -->
+    <a-light id="fire-light" type="point" position="-0.7 1.3 -3.2" intensity="2.6" distance="10" color="#ff6b00"></a-light>
+
+    <!-- Asphalt Car Park Ground & Parking Lot Lines -->
+    <a-plane position="0 0 0" rotation="-90 0 0" width="30" height="30" color="#1e293b"></a-plane>
+    <!-- White Parking Lot Markings -->
+    <a-plane position="0 0.01 -4.8" rotation="-90 0 0" width="4.6" height="0.12" color="#f8fafc"></a-plane>
+    <a-plane position="-2.25 0.01 -3.3" rotation="-90 0 0" width="0.12" height="3.0" color="#f8fafc"></a-plane>
+    <a-plane position="2.25 0.01 -3.3" rotation="-90 0 0" width="0.12" height="3.0" color="#f8fafc"></a-plane>
+    <!-- Concrete Wheel Stopper -->
+    <a-box position="0 0.08 -4.4" width="2.2" height="0.16" depth="0.2" color="#94a3b8"></a-box>
+
+    <!-- Car Park Curb, Grass & Background HDB / Street Lamp -->
+    <a-box position="0 0.1 -5.2" width="30" height="0.2" depth="0.4" color="#64748b"></a-box>
+    <a-plane position="0 0.02 -12" rotation="-90 0 0" width="30" height="13" color="#14532d"></a-plane>
+    
+    <!-- Street Lamp Post -->
+    <a-cylinder position="3.4 2.5 -5.3" radius="0.08" height="5.0" color="#475569"></a-cylinder>
+    <a-box position="2.9 4.95 -5.3" width="1.1" height="0.12" depth="0.25" color="#475569"></a-box>
+    <a-plane position="2.6 4.88 -5.3" rotation="90 0 0" width="0.4" height="0.18" color="#fef08a"></a-plane>
+
+    <!-- Background Residential Block Silhouette -->
+    <a-box position="-5 6 -16" width="10" height="12" depth="4" color="#334155"></a-box>
+    <a-box position="6 5 -16" width="9" height="10" depth="4" color="#334155"></a-box>
+
+    <!-- 3D Sedan Car (Angled slightly so front hood/engine is clearly visible to player) -->
+    <a-entity id="car-vehicle" position="0.2 0 -3.4" rotation="0 -22 0">
+      
+      <!-- Lower Chassis / Body -->
+      <a-box position="0 0.55 0" width="3.9" height="0.62" depth="1.75" color="#2563eb"></a-box>
+      
+      <!-- Upper Cabin / Roof -->
+      <a-box position="0.25 1.12 0" width="2.05" height="0.56" depth="1.52" color="#1d4ed8"></a-box>
+      
+      <!-- Front Windshield & Rear Glass -->
+      <a-box position="-0.78 1.08 0" rotation="0 0 32" width="0.06" height="0.65" depth="1.44" color="#0f172a"></a-box>
+      <a-box position="1.28 1.08 0" rotation="0 0 -32" width="0.06" height="0.65" depth="1.44" color="#0f172a"></a-box>
+      <!-- Side Windows -->
+      <a-box position="0.25 1.12 0.77" width="1.85" height="0.44" depth="0.02" color="#0f172a"></a-box>
+      <a-box position="0.25 1.12 -0.77" width="1.85" height="0.44" depth="0.02" color="#0f172a"></a-box>
+
+      <!-- Front Bumper & Grille -->
+      <a-box position="-1.98 0.42 0" width="0.14" height="0.34" depth="1.78" color="#111827"></a-box>
+      <a-box position="-1.96 0.65 0" width="0.06" height="0.2" depth="0.85" color="#0f172a"></a-box>
+
+      <!-- Headlights -->
+      <a-box position="-1.96 0.68 0.62" width="0.08" height="0.16" depth="0.34" color="#fef08a"></a-box>
+      <a-box position="-1.96 0.68 -0.62" width="0.08" height="0.16" depth="0.34" color="#fef08a"></a-box>
+
+      <!-- Taillights -->
+      <a-box position="1.96 0.68 0.62" width="0.08" height="0.16" depth="0.34" color="#dc2626"></a-box>
+      <a-box position="1.96 0.68 -0.62" width="0.08" height="0.16" depth="0.34" color="#dc2626"></a-box>
+
+      <!-- Slightly Popped / Buckled Hood -->
+      <a-box position="-1.32 0.89 0" rotation="0 0 -8" width="1.22" height="0.06" depth="1.66" color="#1e40af"></a-box>
+
+      <!-- 4 Wheels & Rims -->
+      <a-cylinder position="-1.25 0.34 0.86" rotation="90 0 0" radius="0.34" height="0.22" color="#111827">
+        <a-cylinder position="0 0.115 0" radius="0.19" height="0.02" color="#cbd5e1"></a-cylinder>
+      </a-cylinder>
+      <a-cylinder position="1.25 0.34 0.86" rotation="90 0 0" radius="0.34" height="0.22" color="#111827">
+        <a-cylinder position="0 0.115 0" radius="0.19" height="0.02" color="#cbd5e1"></a-cylinder>
+      </a-cylinder>
+      <a-cylinder position="-1.25 0.34 -0.86" rotation="90 0 0" radius="0.34" height="0.22" color="#111827">
+        <a-cylinder position="0 -0.115 0" radius="0.19" height="0.02" color="#cbd5e1"></a-cylinder>
+      </a-cylinder>
+      <a-cylinder position="1.25 0.34 -0.86" rotation="90 0 0" radius="0.34" height="0.22" color="#111827">
+        <a-cylinder position="0 -0.115 0" radius="0.19" height="0.02" color="#cbd5e1"></a-cylinder>
+      </a-cylinder>
+
+      <!-- Fire & Smoke Directly on the Car Hood / Engine Bay -->
+      <a-entity id="fire-hazard" position="-1.42 0.86 0">
+        <!-- Scorch Mark on Hood -->
+        <a-cylinder position="0 0.02 0" rotation="0 0 -8" radius="0.62" height="0.04" color="#090d16" opacity="0.85"></a-cylinder>
+        
+        <a-entity id="flames-group">
+          <!-- Main Flames -->
+          <a-cone position="0 0.52 0" radius-bottom="0.48" radius-top="0.02" height="1.15" color="#ef4444" opacity="0.92"
+                  animation="property: scale; dir: alternate; dur: 300; loop: true; to: 1.18 1.28 1.18"></a-cone>
+          <a-cone position="-0.18 0.44 0.22" radius-bottom="0.34" radius-top="0.01" height="0.92" color="#f97316" opacity="0.9"
+                  animation="property: scale; dir: alternate; dur: 250; loop: true; to: 0.9 1.22 0.9"></a-cone>
+          <a-cone position="0.16 0.46 -0.2" radius-bottom="0.35" radius-top="0.01" height="0.95" color="#facc15" opacity="0.88"
+                  animation="property: scale; dir: alternate; dur: 280; loop: true; to: 1.12 0.88 1.12"></a-cone>
+          <!-- Front Grille Flare -->
+          <a-cone position="-0.48 0.15 0.1" rotation="0 0 35" radius-bottom="0.24" radius-top="0.01" height="0.65" color="#f97316" opacity="0.85"
+                  animation="property: scale; dir: alternate; dur: 230; loop: true; to: 1.15 1.2 1.15"></a-cone>
+
+          <!-- Rising Dark Smoke Plume -->
+          <a-sphere position="0.08 1.15 0" radius="0.36" color="#1f2937" opacity="0.55"
+                    animation="property: position; from: 0.05 0.95 0; to: 0.35 1.85 -0.15; dur: 1600; loop: true"></a-sphere>
+          <a-sphere position="-0.05 1.45 0.1" radius="0.45" color="#374151" opacity="0.4"
+                    animation="property: position; from: -0.05 1.15 0.1; to: 0.25 2.15 0.2; dur: 2000; loop: true"></a-sphere>
+        </a-entity>
+      </a-entity>
+
+    </a-entity>
+
+    <!-- Player Camera -->
+    <a-camera position="0 1.6 0" look-controls="touchEnabled: true; mouseEnabled: true">
+      
+      <!-- 3D Fire Extinguisher in Front-Right of View -->
+      <a-entity id="extinguisher" position="0.32 -0.32 -0.82" rotation="0 -14 0">
+        
+        <!-- Red Cylinder -->
+        <a-cylinder position="0 -0.15 0" radius="0.12" height="0.54" color="#dc2626"></a-cylinder>
+        <a-sphere position="0 0.12 0" radius="0.12" color="#dc2626"></a-sphere>
+
+        <!-- SS 578 Label -->
+        <a-cylinder class="clickable" onclick="inspectTag()" position="0 -0.12 0.002" radius="0.122" height="0.24" theta-start="-45" theta-length="90" color="#ffffff">
+          <a-text value="DRY POWDER\nSS 578\nTUV SUD VALID" position="0 0 0.124" align="center" color="#111827" width="0.6"></a-text>
+        </a-cylinder>
+
+        <!-- Floating Inspection Popup -->
+        <a-entity id="tag-popup" visible="false" position="-0.42 0.22 -0.05" rotation="0 18 0">
+          <a-plane width="0.66" height="0.4" color="#0f172a" opacity="0.95"></a-plane>
+          <a-text value="SS 578 INSPECTION:\n- TUV SUD Tag: ATTACHED\n- Annual Service: VALID\n- Hydrostatic (5-Yr): PASS\n- Pressure Gauge: GREEN" 
+                  position="-0.29 0.02 0.01" color="#4ade80" width="0.58"></a-text>
+        </a-entity>
+
+        <!-- Valve & Green Pressure Gauge -->
+        <a-cylinder position="0 0.27 0" radius="0.032" height="0.09" color="#374151"></a-cylinder>
+        <a-cylinder position="0 0.28 0.032" rotation="90 0 0" radius="0.022" height="0.015" color="#22c55e"></a-cylinder>
+
+        <!-- Bottom Carry Handle -->
+        <a-box position="0 0.29 -0.08" width="0.024" height="0.018" depth="0.16" color="#111827"></a-box>
+
+        <!-- Top Squeeze Lever -->
+        <a-entity id="top-lever" position="0 0.32 -0.02" rotation="-12 0 0">
+          <a-box position="0 0.01 -0.07" width="0.024" height="0.016" depth="0.16" color="#1f2937"></a-box>
+        </a-entity>
+
+        <!-- Yellow Safety Pin + Large Invisible Click Hitbox -->
+        <a-entity id="safety-pin" position="0 0.305 -0.02">
+          <a-sphere class="clickable" onclick="pullPin()" position="0.06 0 0" radius="0.12" opacity="0" transparent="true"></a-sphere>
+          <a-cylinder position="0 0 0" rotation="0 0 90" radius="0.006" height="0.1" color="#eab308"></a-cylinder>
+          <a-torus position="0.07 0 0" radius="0.026" radius-tubular="0.006" color="#eab308"></a-torus>
+          <a-text value="TAP PIN" position="0.08 0.055 0" align="center" color="#facc15" width="0.65"></a-text>
+        </a-entity>
+
+        <!-- Hose & Nozzle -->
+        <a-entity id="hose-assembly" position="-0.07 0.24 0" rotation="15 10 10">
+          <a-cylinder position="0 -0.16 0" radius="0.015" height="0.32" color="#111827"></a-cylinder>
+          <a-cone position="0 -0.34 0" rotation="180 0 0" radius-bottom="0.024" radius-top="0.015" height="0.08" color="#000000"></a-cone>
+          
+          <!-- Dry Powder Spray -->
+          <a-entity id="powder-spray" visible="false" position="0 -0.4 0">
+            <a-cone position="0 -0.95 0" rotation="180 0 0" radius-bottom="0.55" radius-top="0.03" height="1.9" color="#f8fafc" opacity="0.7"></a-cone>
+            <a-sphere position="0 -1.55 0" radius="0.45" color="#ffffff" opacity="0.55"
+                      animation="property: scale; dir: alternate; dur: 140; loop: true; to: 1.3 1.3 1.3"></a-sphere>
+          </a-entity>
+        </a-entity>
+
+      </a-entity>
+    </a-camera>
+
+  </a-scene>
+
+  <script>
+    let pinPulled = false;
+    let nozzleAimed = false;
+    let isSpraying = false;
+    let fireHealth = 100;
+    let sprayInterval = null;
+    let tagVisible = false;
+
+    const guideText = document.getElementById('guide-text');
+    const statusBadge = document.getElementById('status-badge');
+
+    function inspectTag() {
+      tagVisible = !tagVisible;
+      document.getElementById('tag-popup').setAttribute('visible', tagVisible);
+      document.getElementById('btn-inspect').classList.toggle('active', tagVisible);
+    }
+
+    function pullPin() {
+      if (pinPulled) return;
+      pinPulled = true;
+
+      const pin = document.getElementById('safety-pin');
+      pin.setAttribute('animation', {
+        property: 'position',
+        to: '0.35 0.36 0.1',
+        dur: 500,
+        easing: 'easeOutBack'
+      });
+      setTimeout(() => pin.setAttribute('visible', false), 550);
+
+      const btnPin = document.getElementById('btn-pin');
+      btnPin.classList.remove('highlight');
+      btnPin.classList.add('active');
+      btnPin.disabled = true;
+
+      const btnAim = document.getElementById('btn-aim');
+      btnAim.disabled = false;
+      btnAim.classList.add('highlight');
+
+      statusBadge.textContent = 'PIN PULLED — READY TO AIM';
+      statusBadge.classList.add('warning');
+      guideText.innerHTML = 'Pin removed! Now tap <strong>2. Aim at Fire</strong> to target the base of the engine fire.';
+    }
+
+    function aimNozzle() {
+      if (!pinPulled || nozzleAimed) return;
+      nozzleAimed = true;
+
+      const hose = document.getElementById('hose-assembly');
+      hose.setAttribute('animation', {
+        property: 'rotation',
+        to: '-82 14 0',
+        dur: 450,
+        easing: 'easeOutQuad'
+      });
+
+      const btnAim = document.getElementById('btn-aim');
+      btnAim.classList.remove('highlight');
+      btnAim.classList.add('active');
+      btnAim.disabled = true;
+
+      const btnSpray = document.getElementById('btn-spray');
+      btnSpray.disabled = false;
+      btnSpray.classList.add('highlight');
+
+      guideText.innerHTML = 'Press &amp; HOLD <strong>3. Hold to Spray</strong> while dragging left/right to sweep across the hood!';
+    }
+
+    function startSpray() {
+      if (!nozzleAimed || isSpraying) return;
+      isSpraying = true;
+
+      document.getElementById('top-lever').setAttribute('rotation', '-2 0 0');
+      document.getElementById('powder-spray').setAttribute('visible', true);
+      document.getElementById('btn-spray').classList.remove('highlight');
+      document.getElementById('btn-spray').classList.add('active');
+
+      sprayInterval = setInterval(() => {
+        if (fireHealth > 0) {
+          fireHealth -= 4;
+          const scale = Math.max(fireHealth / 100, 0.01);
+          document.getElementById('flames-group').setAttribute('scale', `${scale} ${scale} ${scale}`);
+          document.getElementById('fire-light').setAttribute('intensity', (fireHealth / 100) * 2.6);
+        } else {
+          clearInterval(sprayInterval);
+          document.getElementById('flames-group').setAttribute('visible', false);
+          statusBadge.textContent = 'VEHICLE FIRE EXTINGUISHED! P.A.S.S. COMPLETE';
+          statusBadge.classList.remove('warning');
+          guideText.innerHTML = '<strong>Vehicle Fire Out!</strong> Tap <strong>Reset Simulator</strong> below to practice again.';
+        }
+      }, 100);
+    }
+
+    function stopSpray() {
+      isSpraying = false;
+      clearInterval(sprayInterval);
+      document.getElementById('top-lever').setAttribute('rotation', '-12 0 0');
+      document.getElementById('powder-spray').setAttribute('visible', false);
+      document.getElementById('btn-spray').classList.remove('active');
+    }
+
+    function resetScene() {
+      stopSpray();
+      pinPulled = false;
+      nozzleAimed = false;
+      fireHealth = 100;
+
+      const pin = document.getElementById('safety-pin');
+      pin.removeAttribute('animation');
+      pin.setAttribute('position', '0 0.305 -0.02');
+      pin.setAttribute('visible', true);
+
+      const hose = document.getElementById('hose-assembly');
+      hose.removeAttribute('animation');
+      hose.setAttribute('rotation', '15 10 10');
+
+      const flames = document.getElementById('flames-group');
+      flames.setAttribute('visible', true);
+      flames.setAttribute('scale', '1 1 1');
+      document.getElementById('fire-light').setAttribute('intensity', 2.6);
+
+      const btnPin = document.getElementById('btn-pin');
+      btnPin.classList.remove('active');
+      btnPin.classList.add('highlight');
+      btnPin.disabled = false;
+
+      const btnAim = document.getElementById('btn-aim');
+      btnAim.classList.remove('active', 'highlight');
+      btnAim.disabled = true;
+
+      const btnSpray = document.getElementById('btn-spray');
+      btnSpray.classList.remove('active', 'highlight');
+      btnSpray.disabled = true;
+
+      statusBadge.textContent = 'SS 578 TAG: VALID | PRESSURE: GREEN';
+      statusBadge.classList.remove('warning');
+      guideText.innerHTML = 'Vehicle engine fire detected! Tap <strong>1. Pull Safety Pin</strong> (or tap the yellow pin).';
+    }
+  </script>
+</body>
+</html>
